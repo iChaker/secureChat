@@ -75,6 +75,6 @@ if __name__=="__main__":
     path = os.path.dirname(__file__)
     cert = os.path.join(path,"ca_cert.pem")
     key = os.path.join(path,"ca_key.pem")
-    sv = caserver("127.0.0.1",80,cert,key)
+    sv = caserver("127.0.0.1",8080,cert,key)
     sv.startsigner()
     #sv.stopsigner

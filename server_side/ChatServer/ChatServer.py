@@ -11,8 +11,6 @@ import gc
 class ChatServer():
 
     def pingcnx(self,timeout,serial,connection):
-
-        print("pinging ",str(serial))
         if not connection.ping(timeout):
             connection.drop()
             print("connection {}:{} Terminated due to Timeout".format(connection.addr[0],connection.addr[1]))
@@ -56,6 +54,7 @@ class ChatServer():
                 conn = self.context.wrap_socket(newsocket, server_side=True)
                 client = ClientThread(self,conn,fromaddr)
                 client.start()
+                self.connections[client.getcert()['serialNumber']] = client
 
 
             except Exception as e:
@@ -84,6 +83,7 @@ class ChatServer():
 
 if __name__=="__main__":
     import os
+    print('HELLO')
     path = os.path.dirname(__file__)
     ca_key = os.path.join(path,"../CA/ca_key.pem")
     ca_cert = os.path.join(path,"../CA/ca_cert.pem")

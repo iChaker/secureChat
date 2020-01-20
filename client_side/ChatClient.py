@@ -2,13 +2,16 @@ import socket
 import ssl
 import json
 import struct
+from Requestor import Requestor
 from threading import  Lock
+import numpy as np
 import threading
 import atexit
+import base64
 class ChatClient(threading.Thread):
     
 
-    def __init__(self,chatip,chatport,sv_name,mycert,svcert,mykey):
+    def __init__(self,chatip,chatport,sv_name,mycert,svcert,mykey,event):
         super(ChatClient,self).__init__()
         context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=svcert)
         context.load_cert_chain(certfile=mycert, keyfile=mykey)
@@ -19,6 +22,9 @@ class ChatClient(threading.Thread):
         self.active= True
         self.raw_messages = list()
         self.recv_lock = Lock()
+        self.requestor= Requestor(mykey)
+        self.start()
+        self.event = event
 
     def send_msg(self, key,val):
         data = json.dumps({key:val})
@@ -30,6 +36,17 @@ class ChatClient(threading.Thread):
             pass
         finally:
             self.send_lock.release()
+
+    def send_to(self,partner_cert,message):
+        with open(partner_cert,'rb') as r:
+            cert = self.requestor.load_certificate(r.read())
+        content = self.requestor.encrypt(cert.public_key(),message.encode())
+        to = '%x' % cert.serial_number
+
+        send = {'to':to.upper(),'content':content}
+        self.send_msg('send',send)
+        
+
 
     def recvall(self,sock, n):
         data = bytearray()
@@ -76,14 +93,16 @@ class ChatClient(threading.Thread):
         self.send_msg('send',data)
 
     def interpret(self,data):
-        print(data,type(data)," <<<<<<<<<<<< interpreting")
         if not data:
             return 1
         if data.get('ping',False):
             self.send_msg('ping','CL')
         
         if data.get('recv',False):
-            self.raw_messages.append({'recv':data['recv']})
+
+            content = self.requestor.decrypt(data['recv']['content'])
+            self.event.set()
+            self.raw_messages.append((data['recv']['from'],content))
         
         return 0
         
@@ -95,10 +114,25 @@ if __name__=="__main__":
     import os
     path = os.path.dirname(__file__)
     server_cert = os.path.join(path,'certificates/cacert.pem')
-    client_cert = os.path.join(path,'certificates/signed_certpem.pem')
-    client_key = os.path.join(path,'certificates/test_key.pem')
+    client1_cert = os.path.join(path,'certificates/client1_cert.pem')
+    client1_key = os.path.join(path,'certificates/test_key.pem')
 
-    chat = ChatClient('127.0.0.1',80,'Simple CA',client_cert,server_cert,client_key)
-    chat.start()
-    atexit.register(chat.shutdown)
+    client2_cert = os.path.join(path,'certificates/client2_cert.pem')
+    client2_key = os.path.join(path,'certificates/client2key.pem')
+
+    #chat1 = ChatClient('127.0.0.1',80,'Simple CA',client1_cert,server_cert,client1_key)
+
+    #chat2 = ChatClient('127.0.0.1',80,'Simple CA',client2_cert,server_cert,client2_key)
+
+    #chat1.send_to("client_side/certificates/client2_cert.pem","hello")
+
+    #initialization
+    #chat = ChatClient()
+
+    #send message
+    #TODO  
+    #chat.send_to(client2_cert.pem,"heelo")
+
+    #handle event
+    # what happens when this shit recieves a message
 

@@ -33,7 +33,6 @@ class ClientThread(Thread):
     def ping(self,timeout):
         self.pinged.clear()
         self.send_msg('ping','SV')
-        print("PGA")
         self.pinged.wait(timeout=timeout)
 
         return self.pinged.is_set()
@@ -58,9 +57,7 @@ class ClientThread(Thread):
 
     def recv_msg(self):
         self.recv_lock.acquire()
-        print("waiting")
         raw_msglen = self.recvall(self.sock, 4)
-        print("recieved")
         if not raw_msglen:
             return None
         msglen = struct.unpack('>I', raw_msglen)[0]
@@ -70,7 +67,6 @@ class ClientThread(Thread):
 
 
     def interpret(self,data):
-        print("INTERPRETING <<<<<<<<<<<<<<<<<<<<<<", data)
         if not data:
             return 1
         if data.get('ping',False):
@@ -78,7 +74,12 @@ class ClientThread(Thread):
         if data.get('send',False):
             message = data['send']
             if self.server.connections.get(message['to'],False):
-                self.server.connections[message['to']].send_msg('recv',{'from': self.getcert()['serialNumber'],'content' :message['content']})
+                if self.server.connections[message['to']].ping(2):
+                    self.server.connections[message['to']].send_msg('recv',{'from': self.getcert()['serialNumber'],'content' :message['content']})
+                else:
+                    self.send_msg('error','recipient disconnected')
+                    self.server.connections[message['to']].drop()
+                    del self.server.connections[message['to']]
             else:
                 self.send_msg('error','recipient disconnected')
                 self.server.connections[message['to']].drop()
@@ -91,16 +92,13 @@ class ClientThread(Thread):
     def send_msg(self, key,val):
         data = json.dumps({key:val})
         msg = struct.pack('>I', len(data)) + data.encode()
-        print("BEFORE ACQUIRE")
         self.send_lock.acquire()
-        print("INSIDE LOCKED")
         try:
             self.sock.sendall(msg)
         except Exception:
             pass
         finally:
             self.send_lock.release()
-        print("AFTER RELEASE")
 
 
     def getcert(self):
